@@ -2,6 +2,8 @@
 
 ### Four months of building an LLM-powered spreadsheet agent — what we tried, what broke, and what worked
 
+**[Documentation](https://witanlabs.com/agents)** | **[Get the CLI and Skills](https://github.com/witanlabs/witan-cli)**
+
 ---
 
 ## Table of contents
