@@ -4,15 +4,39 @@
 
 ---
 
-### Lessons at a glance
+## Table of contents
 
-1. **Let the agent write code, not call tools.** A programmable REPL where the agent composes operations in JavaScript beat every approach based on discrete tool calls. ([details](#the-repl-the-decision-that-changed-everything))
-2. **Agent failures that look like reasoning failures are often data pipeline bugs in disguise.** A one-character extraction bug caused more wrong answers than any prompt issue. Our instinct was to blame the model — the actual problem was upstream. ([details](#the-first-attempt-turn-the-spreadsheet-into-a-database))
-3. **Prompts are code.** Small wording changes in block discovery prompts measurably shifted performance. A SKILL.md with backwards quoting examples caused cascading agent failures. Prompt quality determined agent quality at every phase — version, test, and review them like source code. ([details](#block-discovery-teaching-the-agent-to-see-structure))
-4. **Make the agent think before acting.** A five-step structured reasoning process (disambiguate, define end state, plan, execute, verify) was the highest-leverage intervention for editing tasks. ([details](#three-agents-not-one))
-5. **Domain knowledge is as portable as tools — and often more valuable.** Financial expertise and QnA workflow skills improved results regardless of tool backend. ([details](#domain-knowledge-as-a-product))
-6. **Benchmark relentlessly.** Every significant improvement was motivated by evaluation results — from the 50%→73% bug fix to the 74%→92% REPL trajectory to the humbling verify-vs-openpyxl comparison. ([details](#the-results-from-74-to-92-in-two-weeks))
-7. **A failed test can be the most important one.** Testing the wrong workflow for the task led directly to the product architecture — exec for coding, verify as an add-on. ([details](#the-test-that-shaped-the-product))
+0. [What we learned](#what-we-learned)
+1. [The first attempt: turn the spreadsheet into a database](#the-first-attempt-turn-the-spreadsheet-into-a-database)
+2. [Block discovery: teaching the agent to see structure](#block-discovery-teaching-the-agent-to-see-structure)
+3. [Three agents, not one](#three-agents-not-one)
+4. [A parallel track: understanding formulas from the ground up](#a-parallel-track-understanding-formulas-from-the-ground-up)
+5. [The pivot: TypeScript, .NET, and a new foundation](#the-pivot-typescript-net-and-a-new-foundation)
+6. [The REPL: the decision that changed everything](#the-repl-the-decision-that-changed-everything)
+7. [The results: from 74% to 92% in two weeks](#the-results-from-74-to-92-in-two-weeks)
+8. [Building the evaluation machine](#building-the-evaluation-machine)
+9. [Domain knowledge as a product](#domain-knowledge-as-a-product)
+10. [The test that shaped the product](#the-test-that-shaped-the-product)
+11. [What we learned](#what-we-learned)
+12. [Where this goes](#where-this-goes)
+13. [Appendix: Timeline](#appendix-timeline)
+14. [Deep Dives](#deep-dives)
+
+---
+
+## What we learned
+
+Four months of work across four codebases, hundreds of experiments, and tens of thousands of lines of code distilled into a few recurring themes:
+
+**Tools→batch dispatch→REPL was the entire arc.** We kept trying to constrain the agent into tighter interactions — a SQL query here, a tool call there — and it kept wanting to *program*. The REPL didn't just improve performance; it collapsed a 10-15 call exploration into 2-3 calls and made API evolution trivial (add a function, agent uses it, no tool-layer plumbing). The pattern generalizes: if your agent is making many small sequential tool calls that compose into a larger operation, you've probably reinvented a bad scripting language. Give it a real one.
+
+**"Define the end state before you touch a cell" was the single highest-leverage prompt instruction.** The five-step structured reasoning process (disambiguate, define end state, plan, execute, verify) didn't just reduce errors — it changed the *kind* of errors. Without it, the agent made irreversible mistakes mid-execution. With it, most errors surfaced during planning, where they're cheap. This worked better than giving the agent better tools, more context, or a stronger model.
+
+**Financial expertise outlived every tool we built.** We went through four tool backends (openpyxl, xlwings, the Witan CLI, the REPL). The financial domain knowledge — how to interpret margins, what "profitability" actually asks for, that revenue changes cascade through COGS and working capital — improved results on *all of them*. We structured it as a composable prompt skill, and it's now the most reused component in the system. If you're building a domain-specific agent, the domain knowledge is the product; the tools are replaceable.
+
+**Our evaluation framework is 29,000 lines of TypeScript for a reason.** Every significant improvement traced back to a benchmark result. The extraction bug (50%→73%), the REPL trajectory (74%→92%), the verify-vs-openpyxl test that revealed our documentation was wrong — none of these would have been legible without automated, deterministic evaluation. We also learned the hard way that LLM-as-judge is unreliable for anything with a correct answer: it made inconsistent judgments that masked real regressions. Programmatic comparison (set similarity for values, sequence alignment for layout, pixel comparison for formatting) is slower to build and worth every hour.
+
+**The test that contradicted our thesis was the one that shaped the product.** We expected the Witan CLI verify workflow to beat openpyxl on QnA tasks. It lost, 70% to 85% — not because of capability, but because spawning a separate process per CLI command was the wrong interaction pattern for exploration tasks that need 20+ queries. That failure told us the REPL should be the external product (`witan xlsx exec`), and the remaining CLI commands (`render`, `calc`, `lint`) should be a lightweight verification add-on for agents that already have their own spreadsheet tools. We wouldn't have found either insight if the test had confirmed what we expected.
 
 ---
 
@@ -239,7 +263,7 @@ But the core insight holds: the best way to help an LLM work with spreadsheets i
 
 | Date | Key Event |
 |------|-----------|
-| Oct 15-20 | Rust parser experiments begin (Go, ABNF, PEG) |
+| Oct 20 | Rust parser experiments begin (Go, ABNF, PEG) |
 | Oct 22 | SQLite knowledge representation, first agent |
 | Oct 25 | Batch execution, block discovery agent |
 | Oct 27 | **50% benchmark**, bug fixes |
