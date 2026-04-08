@@ -32,7 +32,7 @@ theme: Trust 1A
 
 ^ Spreadsheets are deceptively hard for AI. A human glances at a financial model and instantly sees structure -- there's a revenue table here, assumptions in that yellow corner, a chart summarizing the P&L. They know "Q4" means the fourth column, parentheses mean negative numbers, the cell labeled "EBITDA" is derived from the ones above it.
 
-^ An LLM sees none of this. Give it a 20-sheet financial model and ask "what's the IRR?" — it knows the concept, but it has to figure out which of 10,000 cells contains the answer, which sheet it's on, and whether that number is an input or a calculated output.
+^ An LLM sees none of this. Ask it "what's the revenue?" and it has to figure out: which revenue? There might be gross revenue, net revenue, revenue by department, revenue by quarter -- dozens of cells labeled "revenue" across multiple sheets. Which time period? Which business unit? Is the number it found an input or a formula? The spatial and semantic disambiguation that a human does at a glance is the hard part.
 
 ---
 
@@ -141,7 +141,7 @@ console.log(revenue);
 // → agent reasons about the output, then writes the next script
 ```
 
-**Result:** small accuracy gain on harder tasks — the agent can course-correct mid-exploration.
+**Result:** accuracy gain on harder tasks — the agent can course-correct mid-exploration.
 
 ^ Code mode is already a big improvement over discrete tools. The agent writes a complete script -- find the sheets, read a range, search for a label, print the results -- all in one call. 50+ lines is common. But everything has to be planned upfront.
 
