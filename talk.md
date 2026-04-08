@@ -30,7 +30,7 @@ theme: Trust 1A
 
 **An LLM sees:** 10,000 cell values, `=SUMPRODUCT((B$3:B$50="NEW")*(G$3:G$50))`, formatting metadata
 
-^ Spreadsheets are deceptively hard for AI. A human glances at a financial model and instantly sees structure -- there's a revenue table here, assumptions in that yellow corner, a chart summarizing the P&L. They know "Q4" means the fourth column, parentheses mean negative numbers, the cell labeled "EBITDA" is derived from the ones above it.
+^ Spreadsheets are deceptively hard for AI. A human glances at a financial model and instantly sees structure -- there's a revenue table here, assumptions in that yellow corner, a chart summarizing the P&L. They know the column labeled "Q4" is a time period, parentheses mean negative numbers, the cell labeled "EBITDA" is derived from the ones above it.
 
 ^ An LLM sees none of this. Ask it "what's the revenue?" and it has to figure out: which revenue? There might be gross revenue, net revenue, revenue by department, revenue by quarter -- dozens of cells labeled "revenue" across multiple sheets. Which time period? Which business unit? Is the number it found an input or a formula? The spatial and semantic disambiguation that a human does at a glance is the hard part.
 
@@ -90,13 +90,13 @@ None of them worked as a general-purpose representation — but two informed wha
 We replaced all 15 tools with a persistent Node.js REPL and a spreadsheet API.
 
 ```
-Agent Loop --(JavaScript code)--> Node.js REPL --(JSON-RPC)--> .NET engine
+Agent Loop --(JavaScript code)--> Node.js REPL --(JSON-RPC)--> Spreadsheet engine
                                       |                            |
                                   Variables persist          Workbook state
                                   across calls               persists
 ```
 
-^ On November 23rd, we replaced all 15 tools with one: a persistent Node.js REPL with access to a spreadsheet API -- about 50 operations for reading, searching, tracing formulas, and writing. Instead of "read this cell", "search for this label", "write this value" as separate tools, the agent writes JavaScript. Variables persist across calls. 90-second timeout per execution, 5MB output limit. The REPL runs in a sandboxed Node.js worker with the permission model enabled -- read-only filesystem access to the workspace, no writes, no network, no child processes.
+^ On November 23rd, we replaced all 15 tools with one: a persistent REPL with access to a spreadsheet API -- about 50 operations for reading, searching, tracing formulas, and writing. Instead of "read this cell", "search for this label", "write this value" as separate tools, the agent writes JavaScript. Variables persist across calls. 90-second timeout per execution, 5MB output limit, sandboxed with no write/network/subprocess access.
 
 ---
 
@@ -147,7 +147,7 @@ console.log(revenue);
 
 ^ Persistent state changes the agent's behavior. It writes shorter scripts, printing fewer items each time, and interleaves reasoning with execution. It can look at output, think about what to explore next, and continue from where it left off. On harder tasks -- multi-sheet analysis, ambiguous labels -- this led to a consistent accuracy improvement. There's also a latency gain: the workbook stays open across calls, so the agent isn't paying the cost of reopening and reparsing the file on every invocation.
 
-^ Two more reasons the REPL worked: flexible exploration -- conditionals, loops, error recovery within a single call, which discrete tools can't do. And API evolution -- adding traceToInputs and traceToOutputs from months of Rust formula work was just adding two functions. No tool schema changes, no registration. The entire API surface ships as a single skill prompt, recently compressed from 61k to 34k characters to fit in agent context windows.
+^ Two more reasons the REPL worked: flexible exploration -- conditionals, loops, error recovery within a single call, which discrete tools can't do. And API evolution -- adding traceToInputs and traceToOutputs from months of formula analysis work was just adding two functions. No tool schema changes, no registration. The entire API surface ships as a single skill prompt the agent reads at the start of a session.
 
 ---
 
@@ -161,10 +161,10 @@ console.log(revenue);
 
 Zero timeouts. 50-second average runtime.
 
-18 points in two weeks from compounding small gains:
+18 points in two weeks from compounding gains:
 better search, new API functions, improved docs, backend bug fixes
 
-^ No single change after the REPL was dramatic on its own. Better fuzzy search, formula tracing functions, improved system prompt documentation, bug fixes in the .NET backend. But each one removed a class of failures, and the effects compounded -- 18 points in two weeks.
+^ No single change after the REPL was dramatic on its own. Better fuzzy search, formula tracing functions, improved system prompt documentation, backend bug fixes. But each one removed a class of failures, and the effects compounded -- 18 points in two weeks.
 
 ^ The zero-timeout number matters. Before the REPL, timeouts were a significant failure mode. After it, every task completed within budget.
 
@@ -187,11 +187,11 @@ graph TD
     C -.-> A
 ```
 
-^ The .NET formula engine and visual renderer close a feedback loop. The agent writes to a cell, the engine recalculates all dependents, the agent checks for formula errors, and if needed renders a region to verify the result visually. This matters because the formula engine is the source of truth -- early on our agent kept calculating things in JavaScript instead of reading from the engine, and its arithmetic was sometimes wrong. The verification loop makes it natural to use the engine: write, recalculate, read the result back.
+^ The formula engine and visual renderer close a feedback loop. The agent writes to a cell, the engine recalculates all dependents, the agent checks for formula errors, and if needed renders a region to verify the result visually. The formula engine is the source of truth -- the verification loop makes it natural to use it rather than attempting arithmetic in code.
 
-^ We tested across Opus 4.6, GPT 5.4, and Gemini 3.1 Pro on a 256-task financial QnA dataset. Compared to the same models with no witan tools or skills, the advantage was consistent: +8 percentage points for Codex/GPT (77.9% vs 69.9%), +5 for Claude Code (72.5% vs 67.2%). Latency was lower too -- 41s vs 49s for Codex, 46s vs 55s for Claude Code. The engines compound with model capability rather than being replaced by it.
+^ We tested across Opus 4.6, GPT 5.4, and Gemini 3.1 Pro on a 256-task financial QnA dataset. The improvement was consistent across model families -- both in accuracy and latency. Each new model used the same verification loop more effectively, but the advantage of having the loop didn't shrink.
 
-^ This requires a real formula engine. openpyxl stores formulas as strings and can't recalculate. The standard workaround is shelling out to LibreOffice, which doesn't support LAMBDA or array formulas, corrupts OOXML on round-trip, and fails silently in containers. In our benchmark, 9 out of 10 tasks where the agent fell back to openpyxl as its primary tool failed. An incomplete engine as feedback makes output worse -- it gives the agent incorrect intermediate results to reason over.
+^ This only works if the engine is high-fidelity. An incomplete formula engine as feedback makes output worse -- the agent reasons over incorrect intermediate results and compounds the errors. The verification loop is only as good as the engines that power it.
 
 ---
 
@@ -205,7 +205,7 @@ If agents become as capable at computer use as they are at coding, the interface
 
 ^ The REPL works today because coding is the dominant model capability. But the jagged frontier of capability keeps moving. If computer use catches up — if agents can interact with a spreadsheet visually as effectively as they can write code against an API — then the best interface might look very different.
 
-^ What won't change is the need for high-fidelity formula calculation, rendering, and linting. These are what let the agent verify its own work. They compound with model capability rather than being replaced by it. Three successive model releases confirmed this — each new model used the same verification loop more effectively.
+^ What won't change is the need for high-fidelity formula calculation, rendering, and linting. These are what let the agent verify its own work. They compound with model capability rather than being replaced by it.
 
 ---
 
@@ -215,9 +215,9 @@ We'd built a separate set of CLI commands — `find`, `calc`, `render`, `lint` �
 
 We tested them against plain openpyxl on 20 QnA tasks. Same model, same runner.
 
-We expected ours to win. It had a formula engine, semantic linting, visual rendering. openpyxl can't even recalculate formulas.
+We expected ours to win. It had a formula engine, semantic linting, visual rendering.
 
-^ By February, we had two Witan products. The REPL that hit 92% on our internal agent. And a set of standalone CLI commands -- find, calc, render, lint -- designed for external use. We wanted to know if these CLI tools could beat the default. So we tested them against plain openpyxl on 20 QnA tasks.
+^ By February, we had two Witan products. The REPL that hit 92% on our internal agent. And a set of standalone CLI commands -- find, calc, render, lint -- designed for external use. We wanted to know if these CLI tools could beat the default.
 
 ---
 
@@ -246,7 +246,7 @@ Every CLI command was a separate process — startup, shell parsing, .NET engine
 
 openpyxl is an in-process library. No subprocesses, no shell, no infrastructure to go wrong.
 
-^ The root cause was structural: each CLI command spawned a process, parsed arguments through a shell, and initialized the .NET engine. That's three layers of overhead and three layers of potential failure per operation. With 20+ operations per task, the overhead dominated.
+^ The root cause was structural: each CLI command spawned a process, parsed arguments through a shell, and initialized the formula engine. That's three layers of overhead and three layers of potential failure per operation. With 20+ operations per task, the overhead dominated.
 
 ^ The specific bugs -- per-cell recalculation instead of batch, shell escaping across three quoting layers, backwards documentation -- were symptoms. Any one could have been fixed, but the architecture meant new failure modes would keep appearing. openpyxl avoided all of this by being a library call.
 
@@ -258,14 +258,11 @@ openpyxl is an in-process library. No subprocesses, no shell, no infrastructure 
 
 This test showed why the REPL worked where the CLI didn't: **a single invocation runs an entire script without spawning a process per operation.**
 
-Two products emerged:
+The REPL architecture should have been the external interface from the start. The individual CLI commands found their role as lightweight verification add-ons.
 
-1. **exec** — the REPL, externalized as a CLI command any agent can use
-2. **verify** — render, calc, lint as a lightweight add-on for agents that already have their own spreadsheet tools
+^ The CLI comparison answered a question we hadn't quite asked: should the REPL be the external interface? We'd built it for our own agent. This test showed exactly why it worked -- a single invocation runs an entire exploration script in one process, avoiding the per-operation overhead that killed the CLI approach.
 
-^ The CLI comparison answered a question we hadn't quite asked: should the REPL be the external product? We'd built it for our own agent. This test showed exactly why it worked -- a single exec invocation runs an entire exploration script in one process, avoiding the per-operation overhead that killed the CLI approach.
-
-^ So we externalized it. `witan xlsx exec` -- any coding agent can use it, not just ours. Changes are ephemeral by default and only persist with an explicit --save flag, so failed edits don't corrupt workbooks. The remaining CLI commands found their role as a lightweight verification add-on for agents that already use openpyxl or pandas.
+^ So we externalized the REPL as a CLI command. The individual commands -- render, calc, lint -- found their role as lightweight add-ons for agents that already have their own spreadsheet tools like openpyxl or pandas.
 
 ---
 
@@ -334,7 +331,9 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 5. **Domain knowledge outlasts tools.** Four backends in four months. The domain knowledge improved results on all of them.
 
-6. **Match evaluation to output type. Check the plumbing first.** Use deterministic comparison for objective outputs, LLM grading for subjective ones. Agent "confusion" is usually infrastructure.
+6. **Match evaluation to output type.** Deterministic comparison for objective outputs, LLM grading for subjective ones.
+
+7. **Check the plumbing first.** Agent "confusion" is usually infrastructure.
 
 ^ One: if your agent is making many small sequential tool calls that compose into a larger operation, you've reinvented a bad scripting language. Give it a real one. This applies anywhere -- data analysis, code generation, system administration.
 
@@ -346,7 +345,9 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 ^ Five: domain knowledge is the most portable asset. We went through four tool backends. The domain knowledge improved results on all of them and outlasted all of them.
 
-^ Six: match your evaluation method to the output type. If the comparison is objective, use programmatic checks -- they're reproducible and you can trust score changes. Reserve LLM grading for genuinely subjective outputs. And when the agent seems confused, check the infrastructure before blaming the model.
+^ Six: match your evaluation method to the output type. If the comparison is objective, use programmatic checks -- they're reproducible and you can trust score changes. Reserve LLM grading for genuinely subjective outputs.
+
+^ Seven: when the agent seems confused, check the infrastructure before blaming the model. This came up over and over -- the extraction bug, the backwards documentation, the recalculation performance issue. The model was usually the last thing that was wrong.
 
 ---
 
@@ -393,7 +394,7 @@ Things to avoid:
 Potential audience questions (prep for hallway track):
 - "How does the REPL handle security/sandboxing?" -- Node.js permission model: read-only fs to workspace, no writes, no net, no child processes. 90s timeout, 5MB output limit.
 - "Does this work with Google Sheets?" -- In progress, architecture is designed to be engine-agnostic
-- "What model?" -- Started GPT-5, ended Claude Opus 4.6. Domain knowledge improved results on both. Tested across Opus 4.6, GPT 5.4, Gemini 3.1 Pro on 256-task dataset -- witan tools gave +5-8pp accuracy and ~15% lower latency vs no-tool baselines across all three model families.
+- "What model?" -- Started GPT-5, ended Claude Opus 4.6. Domain knowledge improved results on both. Tested across Opus 4.6, GPT 5.4, Gemini 3.1 Pro on 256-task dataset -- witan tools gave +5-8pp accuracy (e.g. 77.9% vs 69.9% for Codex/GPT, 72.5% vs 67.2% for Claude Code) and ~15% lower latency vs no-tool baselines across all three model families.
 - "How do you handle the 20K output truncation?" -- Agent learns to be selective about what it logs
 - "What about the Rust formula work?" -- Didn't ship directly, but deeply informed the production API (traceToInputs, traceToOutputs, linting rules)
 - "Why not LibreOffice for formula calculation?" -- Doesn't support LAMBDA/array formulas, corrupts OOXML on round-trip, fails silently in sandboxed environments. 9/10 benchmark tasks using openpyxl as primary tool failed.
