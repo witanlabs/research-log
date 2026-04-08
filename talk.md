@@ -5,6 +5,7 @@ time-budget: 20
 # Teaching Machines to Read Spreadsheets
 
 ### Nuno Campos — Witan Labs
+
 #### AI Engineering London — April 2026
 
 ^ Duration: 20 minutes. Slides + code examples.
@@ -21,6 +22,8 @@ time-budget: 20
 ---
 
 ## The problem
+
+![right fill](assets/startup-vc-mid.png)
 
 **A human sees:** revenue table, assumptions, P&L summary
 
@@ -51,7 +54,7 @@ Fixed one character in the extraction pipeline.
 
 **50% -> 73%**
 
-The agent had *looked* confused. Our instinct was to blame the model.
+The agent had _looked_ confused. Our instinct was to blame the model.
 The actual problem: the agent was reasoning correctly over corrupted inputs.
 
 ^ A one-character bug in our extraction code -- a wrong function argument -- was silently corrupting data for a large fraction of tasks. Fixing that single character moved us from 50 to 73%. More than any prompt engineering we'd done.
@@ -78,13 +81,13 @@ The actual problem: the agent was reasoning correctly over corrupted inputs.
 
 ## The dead ends
 
-| Representation | Why it failed |
-|---|---|
-| TSV views | Lost formatting and structural context |
-| SQL views | Flat tables didn't capture visual structure |
-| HTML tables | Too verbose, consumed too many tokens |
-| DOT graphs | Useful for analysis, not for interaction |
-| XML/XSLT | LLM struggled with the syntax |
+| Representation | Why it failed                               |
+| -------------- | ------------------------------------------- |
+| TSV views      | Lost formatting and structural context      |
+| SQL views      | Flat tables didn't capture visual structure |
+| HTML tables    | Too verbose, consumed too many tokens       |
+| DOT graphs     | Useful for analysis, not for interaction    |
+| XML/XSLT       | LLM struggled with the syntax               |
 
 None of them captured enough of the workbook's structure to be useful for interaction.
 
@@ -188,11 +191,11 @@ Embedded in the system prompt, each learned from a specific failure:
 
 ## The results
 
-| Date | Pass rate | Tasks |
-|------|-----------|-------|
-| Nov 30 | **74%** | 104 |
-| Dec 11 | **88%** | 167 |
-| Dec 14 | **92.1%** | 165 |
+| Date   | Pass rate | Tasks |
+| ------ | --------- | ----- |
+| Nov 30 | **74%**   | 104   |
+| Dec 11 | **88%**   | 167   |
+| Dec 14 | **92.1%** | 165   |
 
 Zero timeouts. 50-second average runtime.
 
@@ -207,11 +210,21 @@ better search, new API functions, improved docs, backend bug fixes
 
 ## The verification loop
 
-The formula engine and renderer close a loop the agent uses to check its own work:
+[.column]
 
-write -> recalculate -> check for errors -> render to verify
+The formula engine and renderer close a loop the agent uses to check its own work.
 
 This held across three successive frontier model releases. Each new model used the same loop more effectively.
+
+[.column]
+
+```mermaid
+graph TD
+    A[Write] --> B[Recalculate]
+    B --> C[Check for errors]
+    C --> D[Render to verify]
+    D -.-> A
+```
 
 ^ The .NET formula engine and visual renderer close a feedback loop. The agent writes to a cell, the engine recalculates all dependents, the agent checks for formula errors, and if needed renders a region to verify the result visually. This is what makes the "zero new formula errors" rule enforceable.
 
@@ -240,10 +253,10 @@ We expected ours to win.
 
 ## openpyxl won
 
-| | openpyxl | Witan CLI |
-|---|---|---|
-| **Pass rate** | **85%** | **70%** |
-| Avg tool calls | 21 | 42 |
+|                | openpyxl | Witan CLI |
+| -------------- | -------- | --------- |
+| **Pass rate**  | **85%**  | **70%**   |
+| Avg tool calls | 21       | 42        |
 
 The simpler approach won by 15 points.
 
@@ -317,13 +330,13 @@ It was the most reused component in the system.
 
 **Ended with** 5 specialized, mostly deterministic strategies:
 
-| Strategy | Method |
-|---|---|
-| Content | Set similarity (Jaccard >= 70%) |
-| Structure | Row-level sequence alignment (dynamic programming) |
-| Visual | Font/color/format comparison (>= 90%) |
-| Scenarios | Set inputs, recalculate, compare outputs |
-| Text | LLM grading — **only** for genuinely subjective answers |
+| Strategy  | Method                                                  |
+| --------- | ------------------------------------------------------- |
+| Content   | Set similarity (Jaccard >= 70%)                         |
+| Structure | Row-level sequence alignment (dynamic programming)      |
+| Visual    | Font/color/format comparison (>= 90%)                   |
+| Scenarios | Set inputs, recalculate, compare outputs                |
+| Text      | LLM grading — **only** for genuinely subjective answers |
 
 29,000 lines of evaluation code. 568 commits. Nearly as complex as the agent.
 
@@ -337,12 +350,12 @@ It was the most reused component in the system.
 
 ## Infrastructure bugs look like reasoning failures
 
-| What it looked like | What it actually was |
-|---|---|
-| Agent can't find data | One-character extraction bug (50% -> 73%) |
-| Agent uses wrong quoting | SKILL.md had backwards examples |
+| What it looked like        | What it actually was                          |
+| -------------------------- | --------------------------------------------- |
+| Agent can't find data      | One-character extraction bug (50% -> 73%)     |
+| Agent uses wrong quoting   | SKILL.md had backwards examples               |
 | Agent times out constantly | Per-cell recalculation query instead of batch |
-| Agent retries endlessly | API returning empty results intermittently |
+| Agent retries endlessly    | API returning empty results intermittently    |
 
 **When the agent seems confused, check the plumbing first.**
 
