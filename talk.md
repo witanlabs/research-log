@@ -1,6 +1,7 @@
 autoscale: true
 slidenumbers: true
 time-budget: 20
+theme: Trust 1A
 
 # Teaching Machines to Read Spreadsheets
 
