@@ -7,18 +7,22 @@ theme: Trust 1A
 
 ### Nuno Campos
 
-#### AI Engineering London — April 2026
+#### Witan Labs, CTO & Co-Founder
+
+#### Previously LangChain, LangGraph
+
+#### AIE London — April 2026
 
 ^ Duration: 20 minutes. Slides + code examples.
 
 ---
 
-## 50% -> 92%
+## 50% -\> 92%
 
 - 4 months, multiple architectures, and many dead ends
 - What mattered most: replacing 15 discrete tools with one REPL
 
-^ This is about building an agent that reads and modifies Excel spreadsheets. We started at 50% accuracy on a financial analysis benchmark and got to 92%. The talk covers what actually moved the needle and what didn't. The short version: we kept building more tools, and the agent kept wanting to program. Once we let it, the results followed.
+^ This is about getting coding agents to become as good at spreadsheets as they are at Python or JS. We started at 50% accuracy on a financial analysis benchmark and got to 92%. I'll chat about what actually moved the needle and what didn't. The agent kept wanting to write code. Once we let it, the results followed.
 
 ---
 
@@ -30,42 +34,39 @@ theme: Trust 1A
 
 **An LLM sees:** 10,000 cell values, `=SUMPRODUCT((B$3:B$50="NEW")*(G$3:G$50))`, formatting metadata
 
-^ Spreadsheets are deceptively hard for AI. A human glances at a financial model and instantly sees structure -- there's a revenue table here, assumptions in that yellow corner, a chart summarizing the P&L. They know the column labeled "Q4" is a time period, parentheses mean negative numbers, the cell labeled "EBITDA" is derived from the ones above it.
+^ Spreadsheets are deceptively hard for AI. A human glances at a financial model and instantly sees structure -- there's a revenue table here, assumptions in that yellow corner, a chart summarizing the P&L.
 
-^ An LLM sees none of this. Ask it "what's the revenue?" and it has to figure out: which revenue? There might be gross revenue, net revenue, revenue by department, revenue by quarter -- dozens of cells labeled "revenue" across multiple sheets. Which time period? Which business unit? Is the number it found an input or a formula? The spatial and semantic disambiguation that a human does at a glance is the hard part.
+^ They know the column labeled "Q4" is a time period, parentheses mean negative numbers, the cell labeled "EBITDA" is derived from the ones above it.
 
----
+^ An LLM sees none of this. Ask it "what's the revenue?" and it has to figure out: which revenue? There might be gross revenue, net revenue, revenue by department, revenue by quarter -- dozens of cells labeled "revenue" across multiple sheets.
 
-## Attempt 1: Turn the spreadsheet into a database
-
-- Excel -> SQLite (every cell, formula, merged region, color block)
-- Agent: LangGraph + GPT-5, tools for SQL query / write cell / insert row
-
-**Result: 50%** — then 73% after fixing a one-character extraction bug
-
-^ Our first instinct: transform the problem. LLMs are good at SQL, so we built a pipeline that converts entire workbooks into SQLite databases. The agent had a handful of tools -- run a SQL query, write to a cell, insert a row. Each tool call was a separate round-trip to the model.
-
-^ Tested against SpreadsheetBench, 130 tasks. First result: 50%. Then a one-character bug in the extraction code -- a wrong function argument -- turned out to be corrupting data for a large fraction of tasks. Fixing it moved us to 73%. The agent had looked confused, so we blamed the model. It was reasoning correctly over bad inputs.
+^ Which time period? Which business unit? Is the number it found an input or a formula? The spatial and semantic disambiguation that a human does at a glance is the hard part.
 
 ---
 
-## Attempt 2: More structure, more agents
+## One dead end
 
 **Three specialized agents:**
 
-1. Block discovery (low effort) — identifies workbook structure
-2. Edit agent (high effort) — 5-step process: disambiguate, define end state, plan, execute, verify
-3. Question agent (read-only) — answers questions
+1. Block discovery — identifies workbook structure
+2. Edit agent — 5-step process: disambiguate, define end state, plan, execute, verify
+3. Question agent — answers questions
 
-**Key finding:** "Define the end state before you touch a cell" was the most impactful prompt instruction
+**Key finding:** Rigid architectures don't win
 
-^ Next we split into three agents. The important one was the edit agent's five-step reasoning process: disambiguate the request, define the desired end state, plan the implementation, execute, verify. This changed the kind of errors we got. Without it, the agent made irreversible mistakes mid-execution. With it, most errors surfaced during planning, where they're cheap. This worked better than giving the agent better tools, more context, or a stronger model.
+^ One thing we tried at the beginning was to split the work into three agents.
 
-^ But the architecture was rigid. Discovery ran once upfront and couldn't be revisited. The three-agent pipeline meant context couldn't flow between stages. And we still had 15+ tools the agent was juggling.
+^ The important one was the edit agent's five-step reasoning process: disambiguate the request, define the desired end state, plan the implementation, execute, verify.
+
+^ This changed the kind of errors we got. Without it, the agent made irreversible mistakes mid-execution.
+
+^ With it, most errors surfaced during planning, where it’s cheaper to fix them. This worked better than giving the agent better tools, more context, or a stronger model.
+
+^ But the architecture was rigid. Discovery ran once upfront and couldn't be revisited. The three-agent pipeline meant context couldn't flow between stages.
 
 ---
 
-## The dead ends
+## More dead ends
 
 | Representation | Why it failed                               |
 | -------------- | ------------------------------------------- |
@@ -77,11 +78,21 @@ theme: Trust 1A
 
 None of them worked as a general-purpose representation — but two informed what came next.
 
-^ We pivoted to TypeScript and .NET for better Excel fidelity, then spent two weeks trying every possible way to represent a workbook to the LLM. None worked as a standalone representation, but two turned out to be useful as methods inside the REPL.
+^ We spent some weeks weeks trying what i think is probably every possible way to represent a spreadsheet to an LLM. None worked as a standalone representation, but two turned out to be useful as methods inside the REPL. They all had something going for them in theory,
 
-^ TSV is compact and communicates surrounding context in few tokens. It works especially well when each cell includes its address — off-by-one counting mistakes are common otherwise — and when formulas are included alongside values. This became `readRangeTsv`, one of the most-used API operations.
+^ eg xml is how excel files are actually represented on disk,
 
-^ HTML was a step in the right direction for when layout, formatting, and whitespace matter — but only when rendered to a raster image. We ended up writing a rendering engine that previews any range to PNG. That became the visual verification step in the feedback loop.
+^ sql has been around for decades (ie so much representation in llm training data) as the canonical way to deal with two dimensional data
+
+^ graphviz dot graphs would expose the dependencies between the formulas, etc.
+
+^ but what matters is what actually works in practice, and none really did
+
+^ They all informed what came after, but worth highlighint two of them
+
+^ TSV/CSV is compact and communicates surrounding context in few tokens. It works especially well when each cell includes its address — off-by-one counting mistakes are common otherwise — and when formulas are included alongside values. This became `readRangeTsv`, one of the most-used API operations.
+
+^ HTML was a step in the right direction for when layout, formatting, and whitespace matter — but only when rendered to an image. We ended up writing a rendering engine that previews any range to PNG. That became the visual verification step in the feedback loop.
 
 ---
 
@@ -96,7 +107,11 @@ Agent Loop --(JavaScript code)--> Node.js REPL --(JSON-RPC)--> Spreadsheet engin
                                   across calls               persists
 ```
 
-^ On November 23rd, we replaced all 15 tools with one: a persistent REPL with access to a spreadsheet API -- about 50 operations for reading, searching, tracing formulas, and writing. Instead of "read this cell", "search for this label", "write this value" as separate tools, the agent writes JavaScript. Variables persist across calls. 90-second timeout per execution, 5MB output limit, sandboxed with no write/network/subprocess access.
+^ On November 23rd, we replaced all 15 tools with one: a persistent REPL with access to a spreadsheet API -- about 50 operations for reading, searching, tracing formulas, and writing. Instead of "read this cell", "search for this label", "write this value" as separate tools, the agent writes JavaScript. Variables persist across calls. <!--90-second timeout per execution, 5MB output limit, sandboxed with no write/network/subprocess access.-->
+
+^ Why JS? We needed a scripting language that is easy to sandbox, and LLMs are super familiar with. Python would probably work equally well
+
+^ The actual implementation of the methods was separate from this, it was in C# as there's more tooling there to deal with xlsx files
 
 ---
 
@@ -121,6 +136,8 @@ const revenue = await xlsx.findCells(wb, "Revenue", { context: 1 });
 console.log(sheets, summary, revenue);
 ```
 
+^ This is what it looked like before and after.
+
 ^ Before: exploring a workbook took 10 to 15 tool calls. Each one is an LLM round-trip -- the model decides what to do, formats the tool call, waits for a result, interprets it, decides the next step.
 
 ^ After: the same exploration in one call. Three operations, all results visible together. But it goes further than just batching.
@@ -143,11 +160,19 @@ console.log(revenue);
 
 **Result:** accuracy gain on harder tasks — the agent can course-correct mid-exploration.
 
-^ Code mode is already a big improvement over discrete tools. The agent writes a complete script -- find the sheets, read a range, search for a label, print the results -- all in one call. 50+ lines is common. But everything has to be planned upfront.
+^ Some of you will be familiar with code mode, repl is one step further.
 
-^ Persistent state changes the agent's behavior. It writes shorter scripts, printing fewer items each time, and interleaves reasoning with execution. It can look at output, think about what to explore next, and continue from where it left off. On harder tasks -- multi-sheet analysis, ambiguous labels -- this led to a consistent accuracy improvement. There's also a latency gain: the workbook stays open across calls, so the agent isn't paying the cost of reopening and reparsing the file on every invocation.
+^ Code mode is gaining more adoption, because it is already a big improvement over discrete tools. The agent writes a complete script -- find the sheets, read a range, search for a label, print the results -- all in one call. 50+ line scripts are common. But everything has to be planned upfront.
 
-^ Two more reasons the REPL worked: flexible exploration -- conditionals, loops, error recovery within a single call, which discrete tools can't do. And API evolution -- adding traceToInputs and traceToOutputs from months of formula analysis work was just adding two functions. No tool schema changes, no registration. The entire API surface ships as a single skill prompt the agent reads at the start of a session.
+^ Persistent state changes the agent's behavior. It writes shorter scripts, printing fewer items each time, and interleaves reasoning with execution. It can look at output, think about what to explore next, and continue from where it left off.
+
+^ On harder tasks -- multi-sheet analysis, ambiguous labels -- this led to a consistent accuracy improvement. There's also a latency gain: the workbook stays open across calls, so the agent isn't paying the cost of reopening and reparsing and saving the file on every invocation.
+
+^ Two more reasons the REPL worked:
+
+^ flexible exploration -- conditionals, loops, error recovery within a single call, which discrete tools can't do. And API evolution -- adding new methods such as traceToInputs and traceToOutputs from months of formula analysis work was just adding two functions.
+
+^ No tool schema changes, no registration. The entire API surface ships as a single skill the agent reads at the start of a session. And explaining the api to the agent is as simple as stuffing a typescript type definitions file in the prompt
 
 ---
 
@@ -162,7 +187,7 @@ console.log(revenue);
 Zero timeouts. 50-second average runtime.
 
 18 points in two weeks from compounding gains:
-better search, new API functions, improved docs, backend bug fixes
+better search, new API methods, improved docs, backend bug fixes
 
 ^ No single change after the REPL was dramatic on its own. Better fuzzy search, formula tracing functions, improved system prompt documentation, backend bug fixes. But each one removed a class of failures, and the effects compounded -- 18 points in two weeks.
 
@@ -187,9 +212,13 @@ graph TD
     C -.-> A
 ```
 
-^ The formula engine and visual renderer close a feedback loop. The agent writes to a cell, the engine recalculates all dependents, the agent checks for formula errors, and if needed renders a region to verify the result visually. The formula engine is the source of truth -- the verification loop makes it natural to use it rather than attempting arithmetic in code.
+^ There's a lot of parallels with coding. Your claude code or codex does a much better job when it can run the compiler, linter, tests and iterate based on those results. As indeed us humans do as well.
 
-^ We tested across Opus 4.6, GPT 5.4, and Gemini 3.1 Pro on a 256-task financial QnA dataset. The improvement was consistent across model families -- both in accuracy and latency. Each new model used the same verification loop more effectively, but the advantage of having the loop didn't shrink.
+^ The same for spreadsheets:
+
+^ The formula engine and visual renderer close a feedback loop. The agent writes to a cell, the engine recalculates all dependents, it checks for formula errors, and renders a region to PNG to verify the result visually.
+
+^ The formula engine and the rendering engine are the source of truth -- the verification loop makes it natural to use it rather than attempting arithmetic in code.
 
 ^ This only works if the engine is high-fidelity. An incomplete formula engine as feedback makes output worse -- the agent reasons over incorrect intermediate results and compounds the errors. The verification loop is only as good as the engines that power it.
 
@@ -199,70 +228,13 @@ graph TD
 
 The **REPL** is an interface — the best one today, because coding is where models are strongest.
 
-The **engines** — formula calculation, rendering, linting — are the durable part. They're what close the verification loop, and they compound with each new model.
+The **engines** — formula calculation, rendering, linting — are the more durable part. They're what close the verification loop, and they compound with each new model.
 
-If agents become as capable at computer use as they are at coding, the interface might change. The engines won't.
+If for instance agents become as capable at computer use as they are at coding, the interface might change. The engines won't.
 
 ^ The REPL works today because coding is the dominant model capability. But the jagged frontier of capability keeps moving. If computer use catches up — if agents can interact with a spreadsheet visually as effectively as they can write code against an API — then the best interface might look very different.
 
 ^ What won't change is the need for high-fidelity formula calculation, rendering, and linting. These are what let the agent verify its own work. They compound with model capability rather than being replaced by it.
-
----
-
-## The test that contradicted our thesis
-
-We'd built a separate set of CLI commands — `find`, `calc`, `render`, `lint` — designed as standalone tools any agent could call.
-
-We tested them against plain openpyxl on 20 QnA tasks. Same model, same runner.
-
-We expected ours to win. It had a formula engine, semantic linting, visual rendering.
-
-^ By February, we had two Witan products. The REPL that hit 92% on our internal agent. And a set of standalone CLI commands -- find, calc, render, lint -- designed for external use. We wanted to know if these CLI tools could beat the default.
-
----
-
-## openpyxl won
-
-|                | openpyxl | Witan CLI |
-| -------------- | -------- | --------- |
-| **Pass rate**  | **85%**  | **70%**   |
-| Avg tool calls | 21       | 42        |
-
-The default approach won by 15 points.
-
-^ 85 to 70, with half the tool calls.
-
----
-
-## Why it lost
-
-Every CLI command was a separate process — startup, shell parsing, .NET engine initialization. That overhead compounded:
-
-1. **A recalculation bug** made each command take 50-130 seconds. 20+ commands per task meant timeouts.
-
-2. **Shell escaping** across three layers (SDK, zsh, .NET parser) broke on sheet names with spaces.
-
-3. **Our documentation** had the quoting examples backwards. The agent followed our wrong instructions faithfully.
-
-openpyxl is an in-process library. No subprocesses, no shell, no infrastructure to go wrong.
-
-^ The root cause was structural: each CLI command spawned a process, parsed arguments through a shell, and initialized the formula engine. That's three layers of overhead and three layers of potential failure per operation. With 20+ operations per task, the overhead dominated.
-
-^ The specific bugs -- per-cell recalculation instead of batch, shell escaping across three quoting layers, backwards documentation -- were symptoms. Any one could have been fixed, but the architecture meant new failure modes would keep appearing. openpyxl avoided all of this by being a library call.
-
-^ There were other issues too: intermittent empty API responses, over-reliance on PNG rendering for data extraction, and no automatic .xls-to-.xlsx conversion.
-
----
-
-## What the failure revealed
-
-This test showed why the REPL worked where the CLI didn't: **a single invocation runs an entire script without spawning a process per operation.**
-
-The REPL architecture should have been the external interface from the start. The individual CLI commands found their role as lightweight verification add-ons.
-
-^ The CLI comparison answered a question we hadn't quite asked: should the REPL be the external interface? We'd built it for our own agent. This test showed exactly why it worked -- a single invocation runs an entire exploration script in one process, avoiding the per-operation overhead that killed the CLI approach.
-
-^ So we externalized the REPL as a CLI command. The individual commands -- render, calc, lint -- found their role as lightweight add-ons for agents that already have their own spreadsheet tools like openpyxl or pandas.
 
 ---
 
@@ -271,7 +243,7 @@ The REPL architecture should have been the external interface from the start. Th
 - We changed tools four times in four months
 - The financial domain knowledge improved results on **every one of them**
 
-Structured as a composable prompt component we call the "Financial Expert Mindset":
+Structured as a composable prompt component:
 
 - How to interpret margins, profitability, revenue cascades
 - Model type recognition (DCF, LBO, three-statement)
@@ -282,13 +254,13 @@ It was the most reused component in the system.
 
 ^ We changed tools four times -- the domain knowledge survived all of them. How to interpret margins, what "profitability" actually asks for, that revenue changes cascade through COGS and working capital. These improved results regardless of what tool the agent was using.
 
-^ We structured it as a composable prompt component. The "Financial Expert Mindset" could be attached to any tool approach. It became the most portable piece of the system.
+^ We structured it as a composable prompt component. The "Financial Expert Mindset" could be attached to any tool approach. It became a very portable piece of the system.
 
 ---
 
 ## Evaluation was half the work
 
-We started with LLM-as-judge. We couldn't tell if a score change was the agent improving or the evaluator being flaky.
+We started with only LLM-as-judge. We couldn't tell if a score change was the agent improving or the evaluator being flaky.
 
 We replaced it with deterministic comparison wherever possible — programmatic checks for values, layout, and formatting. LLM grading only for genuinely subjective text answers.
 
@@ -304,7 +276,7 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 | What it looked like        | What it actually was                          |
 | -------------------------- | --------------------------------------------- |
-| Agent can't find data      | One-character extraction bug (50% -> 73%)     |
+| Agent can't find data      | One-character extraction bug (50% -\> 73%)    |
 | Agent uses wrong quoting   | SKILL.md had backwards examples               |
 | Agent times out constantly | Per-cell recalculation query instead of batch |
 | Agent retries endlessly    | API returning empty results intermittently    |
@@ -313,7 +285,7 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 ^ This was a recurring theme throughout the project. Every time we thought the agent was confused or the model was failing, the actual problem was somewhere in the infrastructure.
 
-^ The one-character extraction bug that looked like model confusion. Documentation with backwards examples that the agent followed faithfully. A performance bug that looked like the agent being slow. An intermittent API failure that looked like the agent retrying for no reason.
+^ A one-character bug that looked like model confusion. Documentation with backwards examples that the agent followed faithfully. A performance bug that looked like the agent being slow. An intermittent API failure that looked like the agent retrying for no reason.
 
 ---
 
@@ -325,9 +297,9 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 2. **Build verification engines.** Formula calc, rendering, and linting close a feedback loop that compounds with model capability rather than being replaced by it.
 
-3. **Interfaces are ephemeral, engines are durable.** The REPL works because coding is today's strongest model skill. That may not last.
+3. **Interfaces are ephemeral, engines are durable.** The REPL works because coding is today's strongest model skill. That may or may not last.
 
-4. **Structured reasoning > better tools.** "Define the end state before you act" caught more errors than any tool improvement.
+4. **Structured reasoning \> better tools.** "Define the end state before you act" caught more errors than any tool improvement.
 
 5. **Domain knowledge outlasts tools.** Four backends in four months. The domain knowledge improved results on all of them.
 
@@ -339,9 +311,9 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 ^ Two: the verification engines -- formula calculation, rendering, linting -- closed a feedback loop that held across three frontier model releases. Each new model used the same loop more effectively. The engines compound with capability.
 
-^ Three: the REPL is the best interface today because coding is where models are strongest. But capability profiles shift. If computer use catches up to coding, different interfaces might work better. The engines underneath are the durable investment.
+^ Three: the REPL is the best interface today because coding is where models are strongest. But capability profiles shift. If computer use catches up to coding, different interfaces might work better. The engines underneath are the durable investment, and they need the best interface at each point in time to really shine.
 
-^ Four: structured reasoning beats better tools. Making the agent define the end state before executing was more impactful than any tool we built.
+^ Four: structured reasoning beats better tools. Making the agent define the end state before executing was super impactful.
 
 ^ Five: domain knowledge is the most portable asset. We went through four tool backends. The domain knowledge improved results on all of them and outlasted all of them.
 
@@ -351,22 +323,17 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 ---
 
-## 50% -> 92%. Four months.
+witanlabs.com/agents
+github.com/witanlabs/research-log
+@nfcampos
 
-We spent four months trying to constrain the agent into tighter interactions.
-It worked better when we gave it a programming environment and got out of the way.
-
-Research log: github.com/witanlabs/research-log
+![30%](assets/Witan-Wordmark-On-Dark.png)
 
 ^ We spent four months trying to make an LLM work with spreadsheets. We tried databases, specialized tools, multi-agent architectures, multiple representations. The breakthrough was giving up on constraining the agent and letting it program.
 
 ^ The REPL collapsed complexity, made the API trivially extensible, and eventually became the product itself. But the more durable insight was about the engines underneath -- formula calculation, rendering, linting. Those are what let each new model do better work on the same tasks.
 
 ^ Thank you.
-
----
-
-![inline 30%](assets/Witan-Wordmark-On-Dark.png)
 
 <!--
 Production notes:
