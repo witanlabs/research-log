@@ -11,8 +11,6 @@ theme: Trust 1A
 
 #### Previously LangChain, LangGraph
 
-#### AIE London — April 2026
-
 ^ Duration: 20 minutes. Slides + code examples.
 
 ---
@@ -272,23 +270,6 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 ---
 
-## Infrastructure bugs look like reasoning failures
-
-| What it looked like        | What it actually was                          |
-| -------------------------- | --------------------------------------------- |
-| Agent can't find data      | One-character extraction bug (50% -\> 73%)    |
-| Agent uses wrong quoting   | SKILL.md had backwards examples               |
-| Agent times out constantly | Per-cell recalculation query instead of batch |
-| Agent retries endlessly    | API returning empty results intermittently    |
-
-**When the agent seems confused, check the plumbing first.**
-
-^ This was a recurring theme throughout the project. Every time we thought the agent was confused or the model was failing, the actual problem was somewhere in the infrastructure.
-
-^ A one-character bug that looked like model confusion. Documentation with backwards examples that the agent followed faithfully. A performance bug that looked like the agent being slow. An intermittent API failure that looked like the agent retrying for no reason.
-
----
-
 [.build-lists: true]
 
 ## What generalizes
@@ -299,13 +280,11 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 3. **Interfaces are ephemeral, engines are durable.** The REPL works because coding is today's strongest model skill. That may or may not last.
 
-4. **Structured reasoning \> better tools.** "Define the end state before you act" caught more errors than any tool improvement.
+4. **Domain knowledge outlasts tools.** Four backends in four months. The domain knowledge improved results on all of them.
 
-5. **Domain knowledge outlasts tools.** Four backends in four months. The domain knowledge improved results on all of them.
+5. **Match evaluation to output type.** Deterministic comparison for objective outputs, LLM grading for subjective ones.
 
-6. **Match evaluation to output type.** Deterministic comparison for objective outputs, LLM grading for subjective ones.
-
-7. **Check the plumbing first.** Agent "confusion" is usually infrastructure.
+6. **Check the plumbing first.** Agent "confusion" is usually infrastructure.
 
 ^ One: if your agent is making many small sequential tool calls that compose into a larger operation, you've reinvented a bad scripting language. Give it a real one. This applies anywhere -- data analysis, code generation, system administration.
 
@@ -313,19 +292,18 @@ We replaced it with deterministic comparison wherever possible — programmatic 
 
 ^ Three: the REPL is the best interface today because coding is where models are strongest. But capability profiles shift. If computer use catches up to coding, different interfaces might work better. The engines underneath are the durable investment, and they need the best interface at each point in time to really shine.
 
-^ Four: structured reasoning beats better tools. Making the agent define the end state before executing was super impactful.
+^ Four: domain knowledge is the most portable asset. We went through four tool backends. The domain knowledge improved results on all of them and outlasted all of them.
 
-^ Five: domain knowledge is the most portable asset. We went through four tool backends. The domain knowledge improved results on all of them and outlasted all of them.
+^ Five: match your evaluation method to the output type. If the comparison is objective, use programmatic checks -- they're reproducible and you can trust score changes. Reserve LLM grading for genuinely subjective outputs.
 
-^ Six: match your evaluation method to the output type. If the comparison is objective, use programmatic checks -- they're reproducible and you can trust score changes. Reserve LLM grading for genuinely subjective outputs.
-
-^ Seven: when the agent seems confused, check the infrastructure before blaming the model. This came up over and over -- the extraction bug, the backwards documentation, the recalculation performance issue. The model was usually the last thing that was wrong.
+^ Six: when the agent seems confused, check the infrastructure before blaming the model. This came up over and over -- the extraction bug, the backwards documentation, the recalculation performance issue. The model was usually the last thing that was wrong.
 
 ---
 
-witanlabs.com/agents
+x.com/nfcampos
+nuno@witanlabs.com
+
 github.com/witanlabs/research-log
-@nfcampos
 
 ![30%](assets/Witan-Wordmark-On-Dark.png)
 
